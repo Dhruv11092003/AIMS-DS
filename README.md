@@ -68,4 +68,48 @@ This structure ensures scalability, explainability, and ease of evaluation durin
 ---
 
 ## Project Structure (High-Level)
+backend/
+app/
+api/
+services/
+models/
+schemas/
+frontend/
+src/
+components/
+pages/
+
+
+---
+
+## Ethical Considerations
+
+- AIMS-DS is intended solely for **depression screening**
+- It does not replace professional clinical assessment
+- Outputs are presented as risk or confidence indicators, not diagnoses
+
+---
+
+## Current Status
+
+- Project structure finalized
+- Backend and frontend scaffolding completed
+- Backend implementation in progress
+
+---
+
+## Future Scope
+
+- Integration of advanced facial affect analysis
+- Expansion of adaptive questioning strategies
+- Validation using benchmark mental health datasets
+- Deployment as a web-based screening platform
+
+---
+
+## Author
+
+**Dhruv Kulshrestha**  
+SET Conference Project  
+
 
