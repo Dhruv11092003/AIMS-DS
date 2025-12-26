@@ -7,3 +7,8 @@ scikit-learn
 pymongo
 moviepy
 imageio-ffmpeg
+librosa
+soundfile
+openai-whisper
+torch
+ffmpeg-python
