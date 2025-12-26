@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+numpy
+scikit-learn
+pymongo
+moviepy
+imageio-ffmpeg
