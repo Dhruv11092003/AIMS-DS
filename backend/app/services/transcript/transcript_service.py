@@ -1,22 +1,33 @@
+"""
+transcript_service.py
+=====================
+Transcript generation using Whisper.
+
+Supports:
+- Session-based transcript storage (existing behavior)
+- Stateless inference transcript generation (NEW)
+"""
+
 import whisper
 import os
 from datetime import datetime
 from bson import ObjectId
+
 from app.core.config import BACKEND_DIR
 from app.core.database import session_collection
 
+# ======================================================
+# LOAD MODEL ONCE
+# ======================================================
 
-# Load model once (important)
 model = whisper.load_model("base")
 
-def resolve_audio_path(audio_path: str) -> str:
-    """
-    Convert stored relative path into absolute, OS-safe path
-    """
-    # Normalize slashes first
-    audio_path = audio_path.replace("\\", "/")
+# ======================================================
+# PATH RESOLUTION
+# ======================================================
 
-    # Make absolute from backend root
+def resolve_audio_path(audio_path: str) -> str:
+    audio_path = audio_path.replace("\\", "/")
     abs_path = os.path.normpath(os.path.join(BACKEND_DIR, audio_path))
 
     if not os.path.exists(abs_path):
@@ -24,15 +35,11 @@ def resolve_audio_path(audio_path: str) -> str:
 
     return abs_path
 
+# ======================================================
+# EXISTING SESSION-BASED TRANSCRIPTION (UNCHANGED)
+# ======================================================
 
 def generate_transcript(session_id: str, question_id: str, audio_path: str):
-    # 🔥 FIX: Resolve absolute path
-    if not os.path.isabs(audio_path):
-        audio_path = os.path.abspath(audio_path)
-
-    if not os.path.exists(audio_path):
-        raise FileNotFoundError(f"Audio file not found at path: {audio_path}")
-
     audio_path = resolve_audio_path(audio_path)
 
     result = model.transcribe(audio_path)
@@ -66,6 +73,21 @@ def generate_transcript(session_id: str, question_id: str, audio_path: str):
         "transcript_path": transcript_path
     }
 
+# ======================================================
+# NEW: STATELESS TRANSCRIPTION FOR INFERENCE (REQUIRED)
+# ======================================================
 
+def generate_transcript_text(audio_path: str) -> str:
+    """
+    Stateless transcript generation.
+    Used for real-time inference (NO DB, NO SESSION).
+    """
 
+    if not os.path.isabs(audio_path):
+        audio_path = os.path.abspath(audio_path)
 
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"Audio file not found at: {audio_path}")
+
+    result = model.transcribe(audio_path)
+    return result["text"].strip()

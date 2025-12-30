@@ -1,0 +1,15 @@
+{
+  "audio_dim": 160,
+  "fkps_dim": 544,
+  "gaze_dim": 32,
+  "pose_dim": 16,
+  "text_dim": 1536,
+  "fusion_dim": 2288,
+  "order": [
+    "audio",
+    "fkps",
+    "gaze",
+    "pose",
+    "text"
+  ]
+}
