@@ -21,8 +21,19 @@ from app.services.scoring.final_decision_service import compute_final_decision
 from app.services.features.audio_feature_service import extract_audio_features
 from app.services.features.video_features import extract_video_features
 from app.services.features.text_embedding_service import embed_text
-
+from app.core.database import session_collection
 from app.services.scoring.fusion_inference_service import run_fusion_inference
+from app.services.session.question_selector import (
+    select_baseline_video_question,
+    select_rl_video_question,
+    
+)
+from app.services.mcq.mcq_selector import select_rl_mcq
+from app.services.rl.rl_state_builder import build_rl_state
+from app.services.rl.rl_policy_loader import get_rl_policy
+from app.services.rl.rl_action_mapper import map_action
+
+
 
 router = APIRouter()
 
@@ -94,6 +105,15 @@ async def submit_question(
             }
         )
 
+        session_collection.update_one(
+            {"session_id": session_id},
+            {
+                "$push": {
+                    "confidence_history": fusion_output["behavioral_confidence"]
+                    }
+            }
+        )
+
         return {
             "question_id": question_id,
             "behavioral_confidence": fusion_output["behavioral_confidence"]
@@ -140,3 +160,114 @@ def finalize(session_id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+    
+@router.get("/{session_id}/next-question")
+def get_next_question(session_id: str):
+    session = get_session(session_id)
+
+    asked_video_ids = [
+        q["question_id"] for q in session.get("questions", [])
+    ]
+
+    # ======================================================
+    # STEP 1 — BASELINE VIDEO QUESTIONS
+    # ======================================================
+    baseline_q = select_baseline_video_question(asked_video_ids)
+    if baseline_q is not None:
+        return {
+            "type": "video",
+            "question": baseline_q
+        }
+
+    # ======================================================
+    # STEP 2 — BASELINE MCQs (ONCE)
+    # ======================================================
+    if session.get("mcq_result") is None:
+        return {
+            "type": "mcq",
+            "mode": "baseline"
+        }
+
+    # ======================================================
+    # STEP 3 — CONFIDENCE CHECK
+    # ======================================================
+    if not session.get("questions"):
+        return {"type": "finalize"}
+
+    confidences = [
+        q["fusion_output"]["behavioral_confidence"]
+        for q in session["questions"]
+    ]
+
+    max_conf = max(confidences)
+
+    # ------------------------------
+    # EARLY STOP IF CONFIDENT
+    # ------------------------------
+    if max_conf >= 0.65:
+        return {"type": "finalize"}
+
+    # ======================================================
+    # STEP 4 — ACTIVATE RL (DB UPDATE)
+    # ======================================================
+    if not session.get("rl_active", False):
+        session_collection.update_one(
+            {"session_id": session_id},
+            {"$set": {"rl_active": True}}
+        )
+        session["rl_active"] = True  # sync local copy
+
+    # ======================================================
+    # STEP 5 — RL DECISION
+    # ======================================================
+    state = build_rl_state(session)
+    rl_model = get_rl_policy()
+    action, _ = rl_model.predict(state, deterministic=True)
+
+    decision = map_action(int(action))
+
+    # ------------------------------------------------------
+    # INCREMENT RL STEP COUNT (DB UPDATE)
+    # ------------------------------------------------------
+    session_collection.update_one(
+        {"session_id": session_id},
+        {"$inc": {"rl_steps": 1}}
+    )
+
+    # ======================================================
+    # STEP 6 — MAP RL ACTION → QUESTION
+    # ======================================================
+    if decision["type"] == "video":
+        q = select_rl_video_question(
+            decision["difficulty"],
+            asked_video_ids
+        )
+
+        if q is None:
+            return {"type": "finalize"}
+
+        return {
+            "type": "video",
+            "question": q
+        }
+
+    if decision["type"] == "mcq":
+        mcq = select_rl_mcq(
+            decision.get("difficulty", "medium"),
+            session=session  # IMPORTANT for no repetition
+        )
+
+        if mcq is None:
+            return {"type": "finalize"}
+
+        return {
+            "type": "mcq",
+            "question": mcq
+        }
+
+    # ======================================================
+    # STEP 7 — FINAL FALLBACK
+    # ======================================================
+    return {"type": "finalize"}

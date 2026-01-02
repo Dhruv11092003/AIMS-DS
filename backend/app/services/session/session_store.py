@@ -15,9 +15,30 @@ def create_session(username: str) -> str:
         "session_id": session_id,
         "username": username,
         "created_at": datetime.utcnow(),
-        "mcq_answers": {},
+
+        # -------------------------
+        # VIDEO QUESTION STATE
+        # -------------------------
+        "questions": [],               # stores video question results
+
+        # -------------------------
+        # MCQ STATE (CRITICAL FIX)
+        # -------------------------
+        "mcq_answers": {},             # {question_id: selected_option}
+        "asked_mcqs": [],              # ✅ TRACK already asked MCQs
+        "mcq_score": 0.0,              # cumulative MCQ score
+
+        # -------------------------
+        # RL / ADAPTIVE STATE
+        # -------------------------
+        "rl_active": False,             # RL triggered or not
+        "rl_steps": 0,                 # number of adaptive steps taken
+        "confidence_history": [],      # behavioral confidence over time
+
+        # -------------------------
+        # FINAL OUTPUT
+        # -------------------------
         "mcq_result": None,
-        "questions": [],
         "session_result": None
     })
 

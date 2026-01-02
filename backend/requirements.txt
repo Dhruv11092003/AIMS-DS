@@ -12,3 +12,5 @@ soundfile
 openai-whisper
 torch
 ffmpeg-python
+stable-baselines3 
+gym
