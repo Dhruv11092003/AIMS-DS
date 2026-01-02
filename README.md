@@ -208,9 +208,8 @@ AIMS-DS/
 
 ```bash
 conda create -n v_gpu python=3.10
-conda activate v_gpu
+conda activate v_gpu (conda virtual environment)
 pip install -r requirements.txt
-```
 
 ---
 
@@ -219,7 +218,8 @@ pip install -r requirements.txt
 From **project root**:
 
 ```bash
-python -m backend.app.main
+cd backend
+uvicorn app.main:app --reload
 ```
 
 Server runs at:
