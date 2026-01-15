@@ -201,13 +201,11 @@ def get_next_question(session_id: str):
         for q in session["questions"]
     ]
 
-    max_conf = max(confidences)
+    avg_conf = sum(confidences) / len(confidences)
 
-    # ------------------------------
-    # EARLY STOP IF CONFIDENT
-    # ------------------------------
-    if max_conf >= 0.65:
+    if avg_conf >= 0.65:
         return {"type": "finalize"}
+
 
     # ======================================================
     # STEP 4 — ACTIVATE RL (DB UPDATE)

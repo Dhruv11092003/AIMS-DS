@@ -74,6 +74,9 @@ def run_fusion_inference(feature_vector: np.ndarray) -> dict:
 
     class_labels = ["Low", "Moderate", "High"]
 
+    sorted_probs = np.sort(probs)[::-1]
+    behavioral_confidence = float(sorted_probs[0] - sorted_probs[1])
+
     # ------------------------------
     # OUTPUT
     # ------------------------------
@@ -83,5 +86,5 @@ def run_fusion_inference(feature_vector: np.ndarray) -> dict:
             class_labels[i]: float(probs[i])
             for i in range(len(class_labels))
         },
-        "behavioral_confidence": float(np.max(probs))
+        "behavioral_confidence": behavioral_confidence
     }
