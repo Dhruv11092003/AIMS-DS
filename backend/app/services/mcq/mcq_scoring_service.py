@@ -64,8 +64,9 @@ def compute_mcq_score(mcq_answers: dict) -> dict:
         weighted_scores.append(answer * weight)
         max_possible += MAX_OPTION_SCORE * weight
 
-        if answer == 1:  # neutral / ambiguous
+        if answer in [1, 2]:  # ambiguous mid-range answers
             neutral_count += 1
+
 
     raw_score = sum(weighted_scores)
     mcq_score = raw_score / max_possible if max_possible > 0 else 0.0

@@ -1,20 +1,32 @@
-from app.services.mcq.question_bank import MCQ_QUESTIONS
+from app.services.mcq.adaptive_mcq_bank import ADAPTIVE_MCQS
+
 
 def select_rl_mcq(difficulty: str, session: dict):
     """
-    Select an RL MCQ based on difficulty,
-    avoiding already asked MCQs.
+    Select an adaptive MCQ for RL phase based on difficulty,
+    avoiding already answered questions.
     """
 
-    asked_mcqs = set(session.get("asked_mcqs", []))
+    asked = set(session.get("asked_mcqs", []))
 
+    # -----------------------------
+    # SAFE DIFFICULTY FALLBACK
+    # -----------------------------
+    bucket = ADAPTIVE_MCQS.get(difficulty)
+
+    if not bucket:
+        bucket = ADAPTIVE_MCQS.get("medium", [])
+
+    # -----------------------------
+    # FILTER UNASKED QUESTIONS
+    # -----------------------------
     candidates = [
-        q for q in MCQ_QUESTIONS
-        if q["difficulty"] == difficulty
-        and q["id"] not in asked_mcqs
+        q for q in bucket
+        if q["id"] not in asked
     ]
 
     if not candidates:
         return None
 
-    return candidates[0]  # deterministic for now
+    # Deterministic for now (can randomize later)
+    return candidates[0]

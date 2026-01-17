@@ -80,12 +80,14 @@ export default function App() {
   if (current.type === "mcq") {
     return (
       <MCQ
+        data={current}            // 🔥 PASS MCQ DATA
         sessionId={sessionId}
         onNext={() => fetchNext(sessionId)}
         onExit={exitSession}
       />
     );
   }
+
 
   if (current.type === "finalize") {
     return <Finalize sessionId={sessionId} onExit={exitSession} />;

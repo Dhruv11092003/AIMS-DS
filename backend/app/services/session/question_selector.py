@@ -13,13 +13,13 @@ def select_baseline_video_question(asked_ids: list):
     return None
 
 
-def select_rl_video_question(difficulty: str, asked_ids: list):
-    """
-    Select an RL-driven video question by difficulty.
-    """
-    pool = VIDEO_QUESTIONS.get(difficulty, [])
-    remaining = [q for q in pool if q["id"] not in asked_ids]
-    return random.choice(remaining) if remaining else None
+# def select_rl_video_question(difficulty: str, asked_ids: list):
+#     """
+#     Select an RL-driven video question by difficulty.
+#     """
+#     pool = VIDEO_QUESTIONS.get(difficulty, [])
+#     remaining = [q for q in pool if q["id"] not in asked_ids]
+#     return random.choice(remaining) if remaining else None
 
 
 # def select_rl_mcq(difficulty: str):

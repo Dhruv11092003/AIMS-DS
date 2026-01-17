@@ -74,8 +74,20 @@ def run_fusion_inference(feature_vector: np.ndarray) -> dict:
 
     class_labels = ["Low", "Moderate", "High"]
 
+# Margin
     sorted_probs = np.sort(probs)[::-1]
-    behavioral_confidence = float(sorted_probs[0] - sorted_probs[1])
+    margin = sorted_probs[0] - sorted_probs[1]
+
+    # Entropy-based uncertainty
+    entropy = -np.sum(probs * np.log(probs + 1e-9))
+    max_entropy = np.log(len(probs))
+    normalized_entropy = entropy / max_entropy  # 0–1
+
+    # Calibrated confidence (LOWER is less certain)
+    behavioral_confidence = float(
+        margin * (1 - normalized_entropy)
+    )
+
 
     # ------------------------------
     # OUTPUT
