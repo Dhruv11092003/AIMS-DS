@@ -4,7 +4,11 @@ import Loader from "../components/Loader";
 import { SessionAPI } from "../api/sessionApi";
 import { motion } from "framer-motion";
 
-function MetricCard({ label, value }) {
+/* =======================
+   Reusable UI Components
+======================= */
+
+function MetricCard({ label, value, suffix = "%" }) {
   return (
     <div
       className="card"
@@ -16,13 +20,17 @@ function MetricCard({ label, value }) {
     >
       <p style={{ fontSize: 14, marginBottom: 6 }}>{label}</p>
       <h3 style={{ fontSize: 22 }}>
-        {(value * 100).toFixed(1)}%
+        {typeof value === "number"
+          ? `${value.toFixed(1)}${suffix}`
+          : value}
       </h3>
     </div>
   );
 }
 
 function ConfidenceBar({ label, value }) {
+  const pct = Math.max(0, Math.min(100, value * 100));
+
   return (
     <div style={{ marginBottom: 16 }}>
       <div
@@ -33,7 +41,7 @@ function ConfidenceBar({ label, value }) {
         }}
       >
         <span>{label}</span>
-        <strong>{(value * 100).toFixed(1)}%</strong>
+        <strong>{pct.toFixed(1)}%</strong>
       </div>
 
       <div
@@ -45,7 +53,7 @@ function ConfidenceBar({ label, value }) {
       >
         <div
           style={{
-            width: `${value * 100}%`,
+            width: `${pct}%`,
             height: "100%",
             borderRadius: 6,
             background: "var(--primary)"
@@ -55,6 +63,10 @@ function ConfidenceBar({ label, value }) {
     </div>
   );
 }
+
+/* =======================
+   Finalize Screen
+======================= */
 
 export default function Finalize({ sessionId, onExit }) {
   const [result, setResult] = useState(null);
@@ -68,24 +80,32 @@ export default function Finalize({ sessionId, onExit }) {
   }, [sessionId]);
 
   if (!result) {
-    return <Loader text="Generating final assessment report…" />;
+    return <Loader text="Generating final Bayesian assessment…" />;
   }
 
   const {
     final_class,
-    final_confidence,
-    behavioral_confidence,
-    mcq_score,
-    mcq_uncertainty,
-    explanation
+    final_probabilities,
+    uncertainty_level,
+    diagnostics
   } = result;
+
+  const {
+    behavioral_probabilities,
+    psychometric_probabilities,
+    disagreement_kl,
+    mcq_uncertainty
+  } = diagnostics || {};
+
+  const uncertaintyHigh = uncertainty_level > 0.7;
+  const disagreementHigh = disagreement_kl > 1.0;
 
   return (
     <Layout
       title="Final Assessment Report"
-      subtitle="AIMS-DS — AI-Based Multimodal Interview & Screening System"
+      subtitle="AIMS-DS — Bayesian Multimodal Mental Health Screening"
     >
-      {/* ===== Predicted Class ===== */}
+      {/* ===== Final Class ===== */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -99,12 +119,24 @@ export default function Finalize({ sessionId, onExit }) {
         }}
       >
         <p style={{ fontSize: 14, marginBottom: 6 }}>
-          Final Predicted Class
+          Final Predicted Severity
         </p>
         <h2 style={{ fontSize: 32 }}>{final_class}</h2>
+
+        {uncertaintyHigh && (
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 13,
+              color: "#b45309"
+            }}
+          >
+            ⚠️ High Uncertainty — Further Review Recommended
+          </p>
+        )}
       </motion.div>
 
-      {/* ===== Metric Cards ===== */}
+      {/* ===== Core Metrics ===== */}
       <div
         style={{
           display: "flex",
@@ -114,71 +146,95 @@ export default function Finalize({ sessionId, onExit }) {
         }}
       >
         <MetricCard
-          label="Final Confidence"
-          value={final_confidence}
-        />
-        <MetricCard
-          label="Behavioral Confidence"
-          value={behavioral_confidence}
-        />
-        <MetricCard
-          label="MCQ Score"
-          value={mcq_score}
+          label="Overall Uncertainty (Entropy)"
+          value={uncertainty_level * 100}
         />
         <MetricCard
           label="MCQ Uncertainty"
-          value={mcq_uncertainty}
+          value={mcq_uncertainty * 100}
+        />
+        <MetricCard
+          label="Behavioral–Psychometric Disagreement (KL)"
+          value={disagreement_kl}
+          suffix=""
         />
       </div>
 
-      {/* ===== Confidence Visualization ===== */}
-      <div
-        className="card"
-        style={{ marginBottom: 28 }}
-      >
+      {/* ===== Severity Distribution ===== */}
+      <div className="card" style={{ marginBottom: 28 }}>
         <h3 style={{ marginBottom: 16 }}>
-          Confidence Breakdown
+          Severity Probability Distribution
         </h3>
 
         <ConfidenceBar
-          label="Behavioral (Video)"
-          value={behavioral_confidence}
+          label="Low Severity"
+          value={final_probabilities?.Low || 0}
         />
         <ConfidenceBar
-          label="Psychometric (MCQ)"
-          value={mcq_score}
+          label="Moderate Severity"
+          value={final_probabilities?.Moderate || 0}
         />
         <ConfidenceBar
-          label="Final Combined Confidence"
-          value={final_confidence}
+          label="High Severity"
+          value={final_probabilities?.High || 0}
         />
       </div>
 
-      {/* ===== Decision Explanation ===== */}
-      <div className="card">
-        <h3 style={{ marginBottom: 12 }}>
-          Decision Explanation
+      {/* ===== Modality Comparison ===== */}
+      <div className="card" style={{ marginBottom: 28 }}>
+        <h3 style={{ marginBottom: 16 }}>
+          Evidence Comparison
         </h3>
 
-        <p style={{ marginBottom: 8 }}>
-          <strong>Decision Rule:</strong>{" "}
-          {explanation?.decision_rule}
+        <p style={{ fontSize: 14, marginBottom: 10 }}>
+          <strong>Behavioral (Video)</strong>
         </p>
+        <ConfidenceBar
+          label="Low"
+          value={behavioral_probabilities?.Low || 0}
+        />
+        <ConfidenceBar
+          label="Moderate"
+          value={behavioral_probabilities?.Moderate || 0}
+        />
+        <ConfidenceBar
+          label="High"
+          value={behavioral_probabilities?.High || 0}
+        />
 
-        <p>
-          The final confidence score is computed using a weighted
-          fusion of video-based behavioral confidence and
-          psychometric MCQ scoring.
-        </p>
+        <hr style={{ margin: "16px 0" }} />
 
-        <p style={{ marginTop: 8 }}>
-          <strong>Fusion Weights:</strong>  
-          Video = {explanation?.fusion_weight},  
-          MCQ = {explanation?.mcq_weight}
+        <p style={{ fontSize: 14, marginBottom: 10 }}>
+          <strong>Psychometric (PHQ-8)</strong>
         </p>
+        <ConfidenceBar
+          label="Low"
+          value={psychometric_probabilities?.Low || 0}
+        />
+        <ConfidenceBar
+          label="Moderate"
+          value={psychometric_probabilities?.Moderate || 0}
+        />
+        <ConfidenceBar
+          label="High"
+          value={psychometric_probabilities?.High || 0}
+        />
+
+        {disagreementHigh && (
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: "#991b1b"
+            }}
+          >
+            ⚠️ Significant discrepancy detected between behavioral
+            signals and self-report.
+          </p>
+        )}
       </div>
 
-      {/* ===== Exit Button (ONLY HERE) ===== */}
+      {/* ===== Exit ===== */}
       <div
         style={{
           marginTop: 40,
