@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, Form
 
 from app.services.mcq.mcq_scoring_service import compute_mcq_score
 from app.services.mcq.question_bank import MCQ_QUESTIONS, MCQ_OPTIONS
-from app.services.session.session_store import store_mcq_answers
 from app.services.session.session_store import get_session
 from app.core.database import session_collection
 router = APIRouter()
@@ -63,9 +62,15 @@ def submit_mcq(session_id: str, mcq_answers: str = Form(...)):
             )
 
         # ----------------------------
-        # SCORE MCQs (UNCHANGED LOGIC)
+        # SCORE MCQs (using the full accumulated set of answers,
+        # not just this submission, so it matches what
+        # final_decision_service sees later)
         # ----------------------------
-        score_result = compute_mcq_score(mcq_answers_dict)
+        full_mcq_answers = dict(session.get("mcq_answers") or {})
+        full_mcq_answers.update({
+            str(qid): mcq_answers_dict[str(qid)] for qid in new_question_ids
+        })
+        score_result = compute_mcq_score(full_mcq_answers)
 
         # ----------------------------
         # UPDATE SESSION (RL-SAFE)

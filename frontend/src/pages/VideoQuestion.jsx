@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function VideoQuestion({ data, sessionId, onNext }) {
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const questionText = data?.question?.text || "";
   const questionId = data?.question?.id;
@@ -15,14 +16,16 @@ export default function VideoQuestion({ data, sessionId, onNext }) {
     if (submitting) return;
 
     setSubmitting(true);
+    setError(null);
 
     try {
-      await SessionAPI.submitVideo(
-        sessionId,
-        questionId,
-        file
-      );
+      await SessionAPI.submitVideo(sessionId, questionId, file);
       await onNext();
+    } catch (err) {
+      setError(
+        err.message ||
+          "Couldn't process that video. Please try recording again."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -86,6 +89,19 @@ export default function VideoQuestion({ data, sessionId, onNext }) {
 
         {/* ===== Recorder ===== */}
         <Recorder onSubmit={handleSubmit} />
+
+        {/* ===== Error ===== */}
+        {error && (
+          <p
+            style={{
+              fontSize: 13,
+              marginTop: 14,
+              color: "var(--danger, #b91c1c)"
+            }}
+          >
+            ⚠️ {error}
+          </p>
+        )}
 
         {/* ===== Info Text ===== */}
         <p

@@ -1,0 +1,98 @@
+import math
+import matplotlib.pyplot as plt
+
+# --- FROM YOUR CODE ---
+LIKELIHOODS = {
+    0 {Low 0.70, Moderate 0.20, High 0.10},
+    1 {Low 0.45, Moderate 0.40, High 0.15},
+    2 {Low 0.20, Moderate 0.50, High 0.30},
+    3 {Low 0.10, Moderate 0.30, High 0.60},
+}
+
+CLASSES = [Low, Moderate, High]
+
+def normalize(d)
+    s = sum(d.values())
+    return {k vs for k, v in d.items()}
+
+def entropy(d)
+    eps = 1e-9
+    vals = [max(v, eps) for v in d.values()]
+    h = -sum(v  math.log(v) for v in vals)
+    return h  math.log(len(vals))
+
+def simulate(responses)
+    probs = {Low0.33,Moderate0.33,High0.34}
+    
+    history = []
+    
+    for t, a in enumerate(responses,1)
+        like = LIKELIHOODS[a]
+        
+        for c in CLASSES
+            probs[c] = like[c]
+        probs = normalize(probs)
+        
+        H = entropy(probs)
+        progress = min(t8,1.0)
+        U = H  (1 - 0.3  progress)
+        
+        history.append({
+            step t,
+            entropy H,
+            uncertainty U,
+            belief probs.copy()
+        })
+    
+    return history
+
+# USERS
+low = simulate([0,0,1,0,1,0,0,1])
+high = simulate([3,3,2,3,3,2,3,3])
+mixed = simulate([0,3,1,2,0,3,1,2])
+
+# -------------------------
+# GRAPH 1 ENTROPY
+# -------------------------
+plt.figure()
+plt.plot([x[step] for x in low],[x[entropy] for x in low],marker='o',label=Low)
+plt.plot([x[step] for x in high],[x[entropy] for x in high],marker='o',label=High)
+plt.plot([x[step] for x in mixed],[x[entropy] for x in mixed],marker='o',label=Mixed)
+plt.xlabel(Step)
+plt.ylabel(Entropy)
+plt.title(Entropy Reduction)
+plt.legend()
+plt.grid()
+plt.show()
+
+# -------------------------
+# GRAPH 2 BELIEF
+# -------------------------
+plt.figure()
+steps = [x[step] for x in high]
+for c in CLASSES
+    plt.plot(steps,[x[belief][c] for x in high],label=c)
+
+plt.xlabel(Step)
+plt.ylabel(Probability)
+plt.title(Belief Convergence (High User))
+plt.legend()
+plt.grid()
+plt.show()
+
+# -------------------------
+# GRAPH 3 DELTA ENTROPY
+# -------------------------
+plt.figure()
+delta = []
+prev = 1
+for x in high
+    delta.append(prev - x[entropy])
+    prev = x[entropy]
+
+plt.plot(steps,delta,marker='o')
+plt.xlabel(Step)
+plt.ylabel(ΔEntropy)
+plt.title(Information Gain)
+plt.grid()
+plt.show()

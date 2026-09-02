@@ -24,12 +24,13 @@ import numpy as np
 import joblib
 from pathlib import Path
 
+from app.core.config import BACKEND_DIR
+
 # ======================================================
 # LOAD TRAINED FUSION MODEL
 # ======================================================
 
-BASE_DIR = Path(__file__).resolve().parents[4]
-MODEL_PATH = BASE_DIR / "backend" / "ml_training" / "models" / "fusion_model.pkl"
+MODEL_PATH = Path(BACKEND_DIR) / "ml_training" / "models" / "fusion_model.pkl"
 
 if not MODEL_PATH.exists():
     raise FileNotFoundError(f"Fusion model not found at: {MODEL_PATH}")

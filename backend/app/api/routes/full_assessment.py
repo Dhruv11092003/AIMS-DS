@@ -22,6 +22,7 @@ from app.services.features.audio_feature_service import extract_audio_features
 from app.services.features.video_features import extract_video_features
 from app.services.features.text_embedding_service import embed_text
 
+from app.services.scoring.runtime_feature_builder import build_feature_vector
 from app.services.scoring.fusion_inference_service import run_fusion_inference
 from app.services.scoring.final_decision_service import compute_final_decision
 
@@ -66,21 +67,24 @@ async def full_assessment(
         # --------------------------------------------------
         # STEP 4: FUSION INFERENCE
         # --------------------------------------------------
-        fusion_output = run_fusion_inference(
-            audio_features=np.array(audio_features),
-            fkps_features=np.array(fkps_features),
-            gaze_features=np.array(gaze_features),
-            pose_features=np.array(pose_features),
-            text_features=np.array(text_features),
+        feature_vector = build_feature_vector(
+            audio_features=audio_features,
+            fkps=fkps_features,
+            gaze=gaze_features,
+            pose=pose_features,
+            text_embedding=text_features
         )
+
+        fusion_output = run_fusion_inference(feature_vector)
 
         # --------------------------------------------------
         # STEP 5: FINAL DECISION (MCQ + FUSION)
         # --------------------------------------------------
-        final_result = compute_final_decision(
-            fusion_output=fusion_output,
-            mcq_answers=json.loads(mcq_answers)
-        )
+        pseudo_session = {
+            "questions": [{"question_id": 0, "fusion_output": fusion_output}],
+            "mcq_answers": json.loads(mcq_answers)
+        }
+        final_result = compute_final_decision(pseudo_session)
 
         return {
             "session_id": session_id,

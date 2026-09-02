@@ -4,7 +4,7 @@ const BASE = import.meta.env.VITE_API_BASE_URL;
 
 export const SessionAPI = {
   createSession(username) {
-    return http(`${BASE}/create`, {
+    return http(`${BASE}/session/create`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ username })
@@ -17,12 +17,19 @@ export const SessionAPI = {
 
   submitVideo(sessionId, questionId, file) {
     const form = new FormData();
-    form.append("video", file);
+    // A raw recorded Blob has no filename, which can make the backend
+    // save it with no extension. Always give it one.
+    const filename =
+      file instanceof File ? file.name : `recording-${Date.now()}.webm`;
+    form.append("video", file, filename);
 
-    return fetch(`${BASE}/session/${sessionId}/question/${questionId}/submit`, {
-      method: "POST",
-      body: form
-    });
+    return http(
+      `${BASE}/session/${sessionId}/question/${questionId}/submit`,
+      {
+        method: "POST",
+        body: form
+      }
+    );
   },
 
   getMcqs() {

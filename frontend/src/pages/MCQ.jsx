@@ -25,6 +25,7 @@ export default function MCQ({ sessionId, onNext, data }) {
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -66,9 +67,17 @@ export default function MCQ({ sessionId, onNext, data }) {
 
   async function submit() {
     setSubmitting(true);
-    await SessionAPI.submitMcqs(sessionId, answers);
-    await onNext(); // calls /next-question
-    setSubmitting(false);
+    setError(null);
+    try {
+      await SessionAPI.submitMcqs(sessionId, answers);
+      await onNext(); // calls /next-question
+    } catch (err) {
+      setError(
+        err.message || "Couldn't submit your answers. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (loading) {
@@ -167,6 +176,18 @@ export default function MCQ({ sessionId, onNext, data }) {
         >
           Submit Responses
         </motion.button>
+
+        {error && (
+          <p
+            style={{
+              fontSize: 13,
+              marginTop: 12,
+              color: "var(--danger, #b91c1c)"
+            }}
+          >
+            ⚠️ {error}
+          </p>
+        )}
       </Layout>
 
       {submitting && <Loader text="Analyzing your responses…" />}

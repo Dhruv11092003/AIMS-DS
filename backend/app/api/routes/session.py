@@ -15,6 +15,7 @@ Key Changes:
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+import logging
 import numpy as np
 from app.services.mcq.question_bank import MCQ_QUESTIONS
 from app.services.session.session_store import (
@@ -34,12 +35,33 @@ from app.services.scoring.runtime_feature_builder import build_feature_vector
 from app.services.scoring.fusion_inference_service import run_fusion_inference
 from app.services.scoring.final_decision_service import compute_final_decision
 
-from app.services.session.question_selector import select_baseline_video_question
+from app.services.session.question_selector import (
+    select_baseline_video_question,
+    select_rl_video_question,
+)
 from app.services.mcq.mcq_selector import select_rl_mcq
 
 from app.services.rl.rl_state_builder import build_rl_state
 from app.services.rl.rl_policy_loader import get_rl_policy
 from app.services.rl.rl_action_mapper import map_action
+
+logger = logging.getLogger(__name__)
+
+
+def _finalize_with_reason(session_id: str, reason: str, **extra):
+    """
+    Build a {"type": "finalize", "debug": ...} response and persist the
+    reason on the session so /finalize can echo it back — this is what
+    lets a broken RL model (or an exhausted question budget) show up as
+    a visible reason on the report screen instead of looking identical
+    to a genuinely confident finalize.
+    """
+    debug = {"reason": reason, **extra}
+    session_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {"finalize_debug": debug}}
+    )
+    return {"type": "finalize", "debug": debug}
 
 
 # ======================================================
@@ -140,85 +162,112 @@ async def submit_question(
 # ======================================================
 
 @router.get("/{session_id}/next-question")
-@router.get("/{session_id}/next-question")
 def get_next_question(session_id: str):
-    session = get_session(session_id)
+    try:
+        session = get_session(session_id)
 
-    # --------------------------------------------------
-    # STEP 1 — VIDEO QUESTIONS
-    # --------------------------------------------------
-    asked_video_ids = [q["question_id"] for q in session.get("questions", [])]
-    video_q = select_baseline_video_question(asked_video_ids)
+        # --------------------------------------------------
+        # STEP 1 — VIDEO QUESTIONS
+        # --------------------------------------------------
+        asked_video_ids = [q["question_id"] for q in session.get("questions", [])]
+        video_q = select_baseline_video_question(asked_video_ids)
 
-    if video_q is not None:
-        return {"type": "video", "question": video_q}
+        if video_q is not None:
+            return {"type": "video", "question": video_q}
 
-    # --------------------------------------------------
-    # STEP 2 — BASELINE PHQ-8 (MANDATORY)
-    # --------------------------------------------------
-    mcq_answers = session.get("mcq_answers") or {}
-    baseline_answered = len(mcq_answers)
+        # --------------------------------------------------
+        # STEP 2 — BASELINE PHQ-8 (MANDATORY)
+        # --------------------------------------------------
+        mcq_answers = session.get("mcq_answers") or {}
+        baseline_answered = len(mcq_answers)
 
-    if baseline_answered < MAX_BASELINE_QUESTIONS:
-        next_mcq = MCQ_QUESTIONS[baseline_answered]
-        return {
-            "type": "mcq",
-            "mode": "baseline",
-            "question": next_mcq
-        }
+        if baseline_answered < MAX_BASELINE_QUESTIONS:
+            next_mcq = MCQ_QUESTIONS[baseline_answered]
+            return {
+                "type": "mcq",
+                "mode": "baseline",
+                "question": next_mcq
+            }
 
-    # --------------------------------------------------
-    # STEP 3 — BAYESIAN DECISION (POST-BASELINE ONLY)
-    # --------------------------------------------------
-    final_decision = compute_final_decision(session)
+        # --------------------------------------------------
+        # STEP 3 — BAYESIAN DECISION (POST-BASELINE ONLY)
+        # --------------------------------------------------
+        final_decision = compute_final_decision(session)
 
-    session_collection.update_one(
-        {"session_id": session_id},
-        {
-            "$set": {"final_decision": final_decision},
-            "$push": {"posterior_history": final_decision["final_probabilities"]}
-        }
-    )
-    session["final_decision"] = final_decision
-
-    # --------------------------------------------------
-    # STEP 4 — CHECK IF RL IS REQUIRED
-    # --------------------------------------------------
-    if not final_decision["needs_rl_refinement"]:
-        return {"type": "finalize"}
-
-    # --------------------------------------------------
-    # STEP 5 — RL BUDGET CHECK
-    # --------------------------------------------------
-    rl_steps = session.get("rl_steps", 0)
-    if rl_steps >= MAX_RL_STEPS:
-        return {"type": "finalize"}
-
-    # --------------------------------------------------
-    # STEP 6 — RL HANDSHAKE
-    # --------------------------------------------------
-    state = build_rl_state(session)
-    rl_model = get_rl_policy()
-    action, _ = rl_model.predict(state, deterministic=True)
-    decision = map_action(int(action))
-
-    session_collection.update_one(
-        {"session_id": session_id},
-        {"$inc": {"rl_steps": 1}}
-    )
-
-    # --------------------------------------------------
-    # STEP 7 — RL MCQ
-    # --------------------------------------------------
-    if decision.get("type") == "mcq":
-        mcq = select_rl_mcq(
-            decision.get("difficulty", "medium"),
-            session=session
+        session_collection.update_one(
+            {"session_id": session_id},
+            {
+                "$set": {"final_decision": final_decision},
+                "$push": {"posterior_history": final_decision["final_probabilities"]}
+            }
         )
-        if mcq:
-            return {"type": "mcq", "question": mcq}
+        session["final_decision"] = final_decision
 
-    return {"type": "finalize"}
+        # --------------------------------------------------
+        # STEP 4 — CHECK IF RL IS REQUIRED
+        # --------------------------------------------------
+        if not final_decision["needs_rl_refinement"]:
+            return _finalize_with_reason(session_id, "confident_no_rl_needed")
+
+        # --------------------------------------------------
+        # STEP 5 — RL BUDGET CHECK
+        # --------------------------------------------------
+        rl_steps = session.get("rl_steps", 0)
+        if rl_steps >= MAX_RL_STEPS:
+            return _finalize_with_reason(
+                session_id, "rl_budget_exhausted", rl_steps=rl_steps
+            )
+
+        # --------------------------------------------------
+        # STEP 6 — RL HANDSHAKE
+        # --------------------------------------------------
+        try:
+            state = build_rl_state(session)
+            rl_model = get_rl_policy()
+            action, _ = rl_model.predict(state, deterministic=True)
+            decision = map_action(int(action))
+        except Exception as e:
+            # RL model unavailable/corrupted — degrade to a safe finalize
+            # instead of a 500, so the session can still complete. The
+            # reason is included in the response (not just the server
+            # log) so a broken RL model doesn't look like a normal,
+            # confident finalize on the frontend.
+            logger.exception("RL policy step failed for session %s", session_id)
+            return _finalize_with_reason(session_id, "rl_step_failed", error=str(e))
+
+        session_collection.update_one(
+            {"session_id": session_id},
+            {"$inc": {"rl_steps": 1}}
+        )
+
+        # --------------------------------------------------
+        # STEP 7 — RL QUESTION SELECTION
+        # --------------------------------------------------
+        if decision.get("type") == "video":
+            video_q = select_rl_video_question(
+                decision.get("difficulty", "medium"),
+                asked_video_ids
+            )
+            if video_q:
+                return {"type": "video", "question": video_q}
+            return _finalize_with_reason(session_id, "no_adaptive_video_available")
+
+        elif decision.get("type") == "mcq":
+            mcq = select_rl_mcq(
+                decision.get("difficulty", "medium"),
+                session=session
+            )
+            if mcq:
+                return {"type": "mcq", "question": mcq}
+            return _finalize_with_reason(session_id, "no_adaptive_mcq_available")
+
+        return _finalize_with_reason(session_id, "rl_chose_finalize")
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("next-question failed for session %s", session_id)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/{session_id}/finalize")
@@ -240,6 +289,13 @@ def finalize(session_id: str):
             "psychometric_evidence": final_decision["diagnostics"]["psychometric_probabilities"],
             "posterior_history": session.get("posterior_history", [])
         })
+
+        # Echo back why the session stopped (set by next-question), so
+        # the report can distinguish "genuinely confident" from
+        # "RL/budget forced an early stop" without needing server logs.
+        finalize_debug = session.get("finalize_debug")
+        if finalize_debug:
+            final_decision = {**final_decision, "debug": finalize_debug}
 
         return final_decision
 

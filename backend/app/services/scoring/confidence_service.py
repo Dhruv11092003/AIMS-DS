@@ -1,10 +1,11 @@
 from datetime import datetime
-from bson import ObjectId
 from app.core.database import session_collection
 from app.services.scoring.fusion_engine import compute_overall_confidence
 
 def compute_and_store_confidence(session_id: str):
-    session = session_collection.find_one({"_id": ObjectId(session_id)})
+    # Sessions are keyed by the "session_id" field (a UUID string), not
+    # Mongo's ObjectId — matches how session_store.py creates sessions.
+    session = session_collection.find_one({"session_id": session_id})
     if not session:
         raise ValueError("Session not found")
 
@@ -26,7 +27,7 @@ def compute_and_store_confidence(session_id: str):
     )
 
     session_collection.update_one(
-        {"_id": ObjectId(session_id)},
+        {"session_id": session_id},
         {"$set": {
             "confidence": confidence
         }}

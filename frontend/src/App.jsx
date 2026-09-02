@@ -10,6 +10,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [current, setCurrent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   /* ===== Restore session on reload ===== */
   useEffect(() => {
@@ -36,31 +37,71 @@ export default function App() {
     if (!sid) return;
 
     setLoading(true);
-    const step = await SessionAPI.nextQuestion(sid);
-    setCurrent(step);
-    persist(sid, step);
-    setLoading(false);
+    setError(null);
+    try {
+      const step = await SessionAPI.nextQuestion(sid);
+      setCurrent(step);
+      persist(sid, step);
+    } catch (err) {
+      setError(err.message || "Couldn't reach the server. Please retry.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function exitSession() {
     sessionStorage.clear();
     setSessionId(null);
     setCurrent({ type: "landing" });
+    setError(null);
   }
 
   if (loading || !current) {
     return <Loader text="Restoring session…" />;
   }
 
+  if (error) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          padding: 24
+        }}
+      >
+        <div className="card" style={{ maxWidth: 420, textAlign: "center" }}>
+          <h3 style={{ marginBottom: 10 }}>Something went wrong</h3>
+          <p style={{ marginBottom: 20 }}>{error}</p>
+          <button
+            className="primary"
+            onClick={() => {
+              setError(null);
+              if (sessionId) fetchNext(sessionId);
+              else setCurrent({ type: "landing" });
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (current.type === "landing") {
     return (
       <Landing
         onStart={async (username) => {
-          const res = await SessionAPI.createSession(username);
-          const sid = res.session_id;
+          setError(null);
+          try {
+            const res = await SessionAPI.createSession(username);
+            const sid = res.session_id;
 
-          setSessionId(sid);
-          await fetchNext(sid);
+            setSessionId(sid);
+            await fetchNext(sid);
+          } catch (err) {
+            setError(err.message || "Couldn't start a session. Please retry.");
+          }
         }}
       />
     );
@@ -90,7 +131,13 @@ export default function App() {
 
 
   if (current.type === "finalize") {
-    return <Finalize sessionId={sessionId} onExit={exitSession} />;
+    return (
+      <Finalize
+        sessionId={sessionId}
+        onExit={exitSession}
+        debugHint={current.debug}
+      />
+    );
   }
 
   return null;

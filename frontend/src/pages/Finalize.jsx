@@ -64,11 +64,26 @@ function ConfidenceBar({ label, value }) {
   );
 }
 
+const REASON_LABELS = {
+  confident_no_rl_needed:
+    "Both evidence sources agreed confidently — no follow-up needed.",
+  rl_budget_exhausted:
+    "The adaptive follow-up question budget was used up before uncertainty dropped further.",
+  rl_step_failed:
+    "The adaptive follow-up step failed to run, so the session ended on the baseline result alone.",
+  no_adaptive_video_available:
+    "No further adaptive video question was available.",
+  no_adaptive_mcq_available:
+    "No further adaptive question was available.",
+  rl_chose_finalize:
+    "The adaptive model chose to stop asking further questions."
+};
+
 /* =======================
    Finalize Screen
 ======================= */
 
-export default function Finalize({ sessionId, onExit }) {
+export default function Finalize({ sessionId, onExit, debugHint }) {
   const [result, setResult] = useState(null);
 
   useEffect(() => {
@@ -87,8 +102,12 @@ export default function Finalize({ sessionId, onExit }) {
     final_class,
     final_probabilities,
     uncertainty_level,
-    diagnostics
+    diagnostics,
+    debug
   } = result;
+
+  const finalizeReason = (debug || debugHint)?.reason;
+  const finalizeError = (debug || debugHint)?.error;
 
   const {
     behavioral_probabilities,
@@ -132,6 +151,21 @@ export default function Finalize({ sessionId, onExit }) {
             }}
           >
             ⚠️ High Uncertainty — Further Review Recommended
+          </p>
+        )}
+
+        {finalizeReason && (
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: finalizeReason === "rl_step_failed" ? "#b91c1c" : "var(--muted)"
+            }}
+          >
+            {REASON_LABELS[finalizeReason] || finalizeReason}
+            {finalizeReason === "rl_step_failed" && finalizeError
+              ? ` (${finalizeError})`
+              : ""}
           </p>
         )}
       </motion.div>

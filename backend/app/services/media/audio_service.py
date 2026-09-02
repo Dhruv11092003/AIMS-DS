@@ -1,6 +1,6 @@
 import os
 from uuid import uuid4
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 
 AUDIO_OUTPUT_DIR = "storage/audios"
 
@@ -25,7 +25,6 @@ def extract_audio_from_video(video_path: str) -> str:
         fps=16000,
         nbytes=2,
         codec="pcm_s16le",
-        verbose=False,
         logger=None
     )
 

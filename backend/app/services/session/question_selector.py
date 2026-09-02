@@ -1,6 +1,4 @@
-import random
 from app.services.session.video_question_bank import VIDEO_QUESTIONS
-from app.services.mcq.adaptive_mcq_bank import ADAPTIVE_MCQS
 
 
 def select_baseline_video_question(asked_ids: list):
@@ -13,18 +11,21 @@ def select_baseline_video_question(asked_ids: list):
     return None
 
 
-# def select_rl_video_question(difficulty: str, asked_ids: list):
-#     """
-#     Select an RL-driven video question by difficulty.
-#     """
-#     pool = VIDEO_QUESTIONS.get(difficulty, [])
-#     remaining = [q for q in pool if q["id"] not in asked_ids]
-#     return random.choice(remaining) if remaining else None
+def select_rl_video_question(difficulty: str, asked_ids: list):
+    """
+    Select an RL-driven video question by difficulty, avoiding
+    questions already asked in this session. Falls back to the
+    other difficulty pools if the requested one is exhausted so
+    the RL agent doesn't get starved mid-session.
+    """
+    ordered_pools = [difficulty] + [
+        d for d in ("easy", "medium", "hard") if d != difficulty
+    ]
 
+    for pool_name in ordered_pools:
+        pool = VIDEO_QUESTIONS.get(pool_name, [])
+        for q in pool:
+            if q["id"] not in asked_ids:
+                return q
 
-# def select_rl_mcq(difficulty: str):
-#     """
-#     Select an RL-driven MCQ.
-#     """
-#     pool = ADAPTIVE_MCQS.get(difficulty, [])
-#     return random.choice(pool) if pool else None
+    return None

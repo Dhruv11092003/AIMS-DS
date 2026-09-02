@@ -30,6 +30,12 @@ ANSWER_LIKELIHOODS = {
     3: {"Low": 0.10, "Moderate": 0.30, "High": 0.60},  # Nearly every day
 }
 
+# Each answer only partially updates the posterior instead of fully
+# multiplying it in. Without this, 6-8 sequential multiplications collapse
+# the distribution to near-zero entropy almost regardless of how mixed the
+# answers actually are, which was why RL never triggered after the baseline.
+EVIDENCE_STRENGTH = 0.35
+
 
 # ======================================================
 # HELPERS
@@ -96,9 +102,9 @@ def compute_mcq_score(mcq_answers: dict) -> dict:
         if likelihood is None:
             continue
 
-        # Multiply likelihood (Bayesian update)
+        # Partial Bayesian update (damped by EVIDENCE_STRENGTH)
         for cls in CLASS_LABELS:
-            probs[cls] *= likelihood[cls]
+            probs[cls] *= likelihood[cls] ** EVIDENCE_STRENGTH
 
         probs = _normalize(probs)
 
